@@ -9,39 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.6'
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-
-      - name: Save release upload URL
-        run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
-
-      - name: Upload release URL artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release_url
-          path: release_url.txt
-
   build:
-    needs: release
     strategy:
       matrix:
         include:
@@ -82,21 +50,6 @@ jobs:
         with:
           go-version: '1.23.6'
 
-      - name: Download release URL artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: release_url
-
-      - name: Get release upload URL
-        id: get_release_url
-        run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
-          else
-            echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
-
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -113,61 +66,104 @@ jobs:
           fi
         shell: bash
 
-      - name: Upload Release Asset (tar.gz)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}.tar.gz
-          asset_name: ${{ matrix.asset_name }}.tar.gz
-          asset_content_type: application/gzip
+          name: ${{ matrix.asset_name }}
+          path: |
+            ${{ matrix.asset_name }}.tar.gz
+            ${{ matrix.asset_name }}.zip
+          retention-days: 1
 
-      - name: Upload Release Asset (zip)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}.zip
-          asset_name: ${{ matrix.asset_name }}.zip
-          asset_content_type: application/zip
-
-  checksums:
+  release:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download release URL artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release_url
+          path: artifacts/
 
-      - name: Get release upload URL
-        id: get_release_url
-        run: echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
-
-      - name: Download release assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare release assets
         run: |
-          TAG="${{ github.ref_name }}"
-          gh release download "$TAG" --pattern "*.tar.gz" --pattern "*.zip"
+          mkdir -p release-assets
+          find artifacts/ -name "*.tar.gz" -o -name "*.zip" | xargs -I {} cp {} release-assets/
+          ls -la release-assets/
 
       - name: Generate checksums
         run: |
+          cd release-assets
           sha256sum *.tar.gz *.zip > checksums.txt
+          cat checksums.txt
 
-      - name: Upload checksums
-        uses: actions/upload-release-asset@v1
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## What's New in ${{ github.ref_name }}
+
+          This release includes pre-built binaries for multiple platforms and architectures.
+
+          ### Features
+          - MySQL database integration via Model Context Protocol (MCP)
+          - Query execution with multiple output formats (table, CSV, markdown, JSON)
+          - Schema inspection and table listing
+          - Query caching for improved performance
+          - Cross-platform support
+
+          ### Installation
+
+          **Linux (amd64):**
+          ```bash
+          curl -L https://github.com/koh-yoshimoto/mysql-mcp-server/releases/download/${{ github.ref_name }}/mysql-mcp-server-linux-amd64.tar.gz | tar xz
+          chmod +x mysql-mcp-server
+          sudo mv mysql-mcp-server /usr/local/bin/
+          ```
+
+          **macOS (Apple Silicon):**
+          ```bash
+          curl -L https://github.com/koh-yoshimoto/mysql-mcp-server/releases/download/${{ github.ref_name }}/mysql-mcp-server-darwin-arm64.tar.gz | tar xz
+          chmod +x mysql-mcp-server
+          sudo mv mysql-mcp-server /usr/local/bin/
+          ```
+
+          **macOS (Intel):**
+          ```bash
+          curl -L https://github.com/koh-yoshimoto/mysql-mcp-server/releases/download/${{ github.ref_name }}/mysql-mcp-server-darwin-amd64.tar.gz | tar xz
+          chmod +x mysql-mcp-server
+          sudo mv mysql-mcp-server /usr/local/bin/
+          ```
+
+          **Windows:**
+          Download the `.zip` file and extract `mysql-mcp-server.exe` to a directory in your PATH.
+
+          ### Supported Platforms
+          - Linux (amd64, arm64)
+          - macOS (amd64, arm64)
+          - Windows (amd64)
+
+          ### Verification
+          After installation, verify with:
+          ```bash
+          mysql-mcp-server --version
+          ```
+
+          ### Documentation
+          See the [README](https://github.com/koh-yoshimoto/mysql-mcp-server/blob/main/README.md) for configuration and usage instructions.
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
-          asset_path: ./checksums.txt
-          asset_name: checksums.txt
-          asset_content_type: text/plain
