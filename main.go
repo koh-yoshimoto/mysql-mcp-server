@@ -87,7 +87,7 @@ func (s *MCPServer) Start() {
 		log.Println("MySQL tools will not be available until connection is established")
 	} else {
 		log.Println("MySQL connection established")
-		
+
 		// Initialize cache with 5 minute TTL and 1000 max entries
 		s.queryCache = cache.NewQueryCache(5*time.Minute, 1000)
 		log.Println("Query cache initialized")
@@ -289,9 +289,9 @@ func (s *MCPServer) handleQueryTool(id interface{}, args json.RawMessage) *Respo
 		if cachedResults, found := s.queryCache.Get(query); found {
 			log.Printf("Cache hit for query: %s", query)
 			executionTime := time.Since(start)
-			
+
 			formattedOutput := s.formatResults(cachedResults, outputFormat)
-			
+
 			return &Response{
 				JSONRPC: "2.0",
 				ID:      id,
@@ -299,7 +299,7 @@ func (s *MCPServer) handleQueryTool(id interface{}, args json.RawMessage) *Respo
 					"content": []map[string]interface{}{
 						{
 							"type": "text",
-							"text": fmt.Sprintf("Query executed in %dms (cached). %d rows returned.", 
+							"text": fmt.Sprintf("Query executed in %dms (cached). %d rows returned.",
 								executionTime.Milliseconds(), len(cachedResults)),
 						},
 						{
@@ -340,7 +340,7 @@ func (s *MCPServer) handleQueryTool(id interface{}, args json.RawMessage) *Respo
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
-					"text": fmt.Sprintf("Query executed in %dms. %d rows returned.", 
+					"text": fmt.Sprintf("Query executed in %dms. %d rows returned.",
 						executionTime.Milliseconds(), len(results)),
 				},
 				{
@@ -482,7 +482,14 @@ func (s *MCPServer) sendError(id interface{}, code int, message string) error {
 	return s.sendResponse(resp)
 }
 
+var Version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Printf("mysql-mcp-server %s\n", Version)
+		os.Exit(0)
+	}
+
 	server := NewMCPServer()
 	server.Start()
 }
