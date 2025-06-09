@@ -31,14 +31,14 @@ sudo mv mysql-mcp-server /usr/local/bin/
 ```bash
 curl -L https://github.com/koh/mysql-mcp-server/releases/latest/download/mysql-mcp-server-darwin-arm64.tar.gz | tar xz
 chmod +x mysql-mcp-server
-sudo mv mysql-mcp-server /usr/local/bin/
+mv mysql-mcp-server /usr/local/bin/
 ```
 
 **macOS (Intel):**
 ```bash
 curl -L https://github.com/koh/mysql-mcp-server/releases/latest/download/mysql-mcp-server-darwin-amd64.tar.gz | tar xz
 chmod +x mysql-mcp-server
-sudo mv mysql-mcp-server /usr/local/bin/
+mv mysql-mcp-server /usr/local/bin/
 ```
 
 **Windows:**
