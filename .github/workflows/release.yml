@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Save release upload URL
+        run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
+
+      - name: Upload release URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release_url
+          path: release_url.txt
+
+  build:
+    needs: release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary_name: mysql-mcp-server
+            asset_name: mysql-mcp-server-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            binary_name: mysql-mcp-server
+            asset_name: mysql-mcp-server-linux-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            binary_name: mysql-mcp-server
+            asset_name: mysql-mcp-server-darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            binary_name: mysql-mcp-server
+            asset_name: mysql-mcp-server-darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary_name: mysql-mcp-server.exe
+            asset_name: mysql-mcp-server-windows-amd64.exe
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.6'
+
+      - name: Download release URL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release_url
+
+      - name: Get release upload URL
+        id: get_release_url
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
+          else
+            echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o ${{ matrix.binary_name }}
+
+      - name: Create archive
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            7z a -tzip ${{ matrix.asset_name }}.zip ${{ matrix.binary_name }} README.md LICENSE
+          else
+            tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.binary_name }} README.md LICENSE
+          fi
+        shell: bash
+
+      - name: Upload Release Asset (tar.gz)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}.tar.gz
+          asset_name: ${{ matrix.asset_name }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Release Asset (zip)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}.zip
+          asset_name: ${{ matrix.asset_name }}.zip
+          asset_content_type: application/zip
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release URL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release_url
+
+      - name: Get release upload URL
+        id: get_release_url
+        run: echo "upload_url=$(cat release_url.txt)" >> $GITHUB_OUTPUT
+
+      - name: Download release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release download "$TAG" --pattern "*.tar.gz" --pattern "*.zip"
+
+      - name: Generate checksums
+        run: |
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: Upload checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release_url.outputs.upload_url }}
+          asset_path: ./checksums.txt
+          asset_name: checksums.txt
+          asset_content_type: text/plain
