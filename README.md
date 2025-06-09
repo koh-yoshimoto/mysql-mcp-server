@@ -16,6 +16,40 @@ A Model Context Protocol (MCP) server that provides MySQL database access throug
 
 ## Installation
 
+### Option 1: Download Pre-built Binary (Recommended)
+
+Download the latest release for your platform:
+
+**Linux (amd64):**
+```bash
+curl -L https://github.com/koh/mysql-mcp-server/releases/latest/download/mysql-mcp-server-linux-amd64.tar.gz | tar xz
+chmod +x mysql-mcp-server
+sudo mv mysql-mcp-server /usr/local/bin/
+```
+
+**macOS (Apple Silicon):**
+```bash
+curl -L https://github.com/koh/mysql-mcp-server/releases/latest/download/mysql-mcp-server-darwin-arm64.tar.gz | tar xz
+chmod +x mysql-mcp-server
+sudo mv mysql-mcp-server /usr/local/bin/
+```
+
+**macOS (Intel):**
+```bash
+curl -L https://github.com/koh/mysql-mcp-server/releases/latest/download/mysql-mcp-server-darwin-amd64.tar.gz | tar xz
+chmod +x mysql-mcp-server
+sudo mv mysql-mcp-server /usr/local/bin/
+```
+
+**Windows:**
+```powershell
+# Download from https://github.com/koh/mysql-mcp-server/releases/latest
+# Extract mysql-mcp-server-windows-amd64.zip
+# Add to PATH or move mysql-mcp-server.exe to a directory in PATH
+```
+
+### Option 2: Build from Source
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/koh/mysql-mcp-server.git
@@ -26,6 +60,14 @@ cd mysql-mcp-server
 ```bash
 make build
 # Or use make setup for full development setup
+```
+
+### Verify Installation
+
+After installation, verify the server is accessible:
+
+```bash
+mysql-mcp-server --version
 ```
 
 ## Configuration
@@ -57,7 +99,7 @@ Add the server to your Claude Desktop configuration file:
 {
   "mcpServers": {
     "mysql": {
-      "command": "/path/to/mysql-mcp-server",
+      "command": "mysql-mcp-server",
       "env": {
         "MYSQL_HOST": "localhost",
         "MYSQL_PORT": "3306",
