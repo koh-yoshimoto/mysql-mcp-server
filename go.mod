@@ -1,4 +1,4 @@
-module github.com/koh/mysql-mcp-server
+module github.com/koh-yoshimoto/mysql-mcp-server
 
 go 1.21
 

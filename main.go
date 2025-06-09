@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/koh/mysql-mcp-server/cache"
-	"github.com/koh/mysql-mcp-server/format"
-	"github.com/koh/mysql-mcp-server/mysql"
+	"github.com/koh-yoshimoto/mysql-mcp-server/cache"
+	"github.com/koh-yoshimoto/mysql-mcp-server/format"
+	"github.com/koh-yoshimoto/mysql-mcp-server/mysql"
 	"github.com/tidwall/gjson"
 )
 
