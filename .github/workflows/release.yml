@@ -109,25 +109,26 @@ jobs:
           
           # Generate PR list with titles
           if [ -z "$PREV_TAG" ]; then
-            echo "First release - showing all PR merges"
-            # Get merge commits and extract PR info
+            echo "First release - showing all changes"
+            # Try to get PR merges first
             COMMITS=$(git log --merges --pretty=format:"%s|%h" --reverse | while IFS='|' read -r msg hash; do
-              # Extract PR number and branch info
               if [[ $msg =~ ^Merge\ pull\ request\ #([0-9]+)\ from\ (.+)$ ]]; then
                 PR_NUM="${BASH_REMATCH[1]}"
                 BRANCH="${BASH_REMATCH[2]}"
-                # Get the PR title from the commit body or use branch name
                 PR_TITLE=$(git log -1 --format=%b $hash | head -n1 | sed 's/^[[:space:]]*//')
                 if [ -z "$PR_TITLE" ]; then
-                  # Fallback to branch name if no PR title in commit body
                   PR_TITLE=$(echo "$BRANCH" | sed 's/.*\///' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
                 fi
                 echo "- #$PR_NUM: $PR_TITLE"
               else
-                # Handle other merge formats (e.g., squash merges)
                 echo "- $msg"
               fi
             done)
+            # If no PR merges found, fall back to all commits
+            if [ -z "$COMMITS" ]; then
+              echo "No PR merges found, showing all commits"
+              COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse | head -20)
+            fi
           else
             echo "Comparing with previous tag: $PREV_TAG"
             COMMITS=$(git log ${PREV_TAG}..HEAD --merges --pretty=format:"%s|%h" --reverse | while IFS='|' read -r msg hash; do
@@ -143,6 +144,16 @@ jobs:
                 echo "- $msg"
               fi
             done)
+            # If no PR merges found, fall back to all commits
+            if [ -z "$COMMITS" ]; then
+              echo "No PR merges found since $PREV_TAG, showing all commits"
+              COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
+            fi
+          fi
+          
+          # Ensure COMMITS is not empty
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- Initial release"
           fi
           
           cat > release_notes.md << 'EOF'
@@ -157,15 +168,6 @@ jobs:
           echo "$COMMITS" >> release_notes.md
           
           cat >> release_notes.md << 'EOF'
-
-          ### Features
-          - MySQL database integration via Model Context Protocol (MCP)
-          - Query execution with multiple output formats (table, CSV, markdown, JSON)
-          - Schema inspection and table listing
-          - Query analysis with EXPLAIN tool for performance optimization
-          - Query caching for improved performance
-          - Data masking support for sensitive information
-          - Cross-platform support
 
           ### Installation
 
