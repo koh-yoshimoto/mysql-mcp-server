@@ -497,7 +497,6 @@ func (s *MCPServer) handleExplainTool(id interface{}, args json.RawMessage) *Res
 	}
 }
 
-
 func (s *MCPServer) formatResults(results []map[string]interface{}, outputFormat string) string {
 	if len(results) == 0 {
 		return "No results"
@@ -549,7 +548,7 @@ func (s *MCPServer) sendError(id interface{}, code int, message string) error {
 	return s.sendResponse(resp)
 }
 
-var Version = "0.1.1"
+var Version = "0.1.2"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
