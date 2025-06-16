@@ -81,6 +81,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -102,16 +104,67 @@ jobs:
       - name: Generate release notes
         id: release_notes
         run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          
+          # Generate PR list with titles
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - showing all PR merges"
+            # Get merge commits and extract PR info
+            COMMITS=$(git log --merges --pretty=format:"%s|%h" --reverse | while IFS='|' read -r msg hash; do
+              # Extract PR number and branch info
+              if [[ $msg =~ ^Merge\ pull\ request\ #([0-9]+)\ from\ (.+)$ ]]; then
+                PR_NUM="${BASH_REMATCH[1]}"
+                BRANCH="${BASH_REMATCH[2]}"
+                # Get the PR title from the commit body or use branch name
+                PR_TITLE=$(git log -1 --format=%b $hash | head -n1 | sed 's/^[[:space:]]*//')
+                if [ -z "$PR_TITLE" ]; then
+                  # Fallback to branch name if no PR title in commit body
+                  PR_TITLE=$(echo "$BRANCH" | sed 's/.*\///' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
+                fi
+                echo "- #$PR_NUM: $PR_TITLE"
+              else
+                # Handle other merge formats (e.g., squash merges)
+                echo "- $msg"
+              fi
+            done)
+          else
+            echo "Comparing with previous tag: $PREV_TAG"
+            COMMITS=$(git log ${PREV_TAG}..HEAD --merges --pretty=format:"%s|%h" --reverse | while IFS='|' read -r msg hash; do
+              if [[ $msg =~ ^Merge\ pull\ request\ #([0-9]+)\ from\ (.+)$ ]]; then
+                PR_NUM="${BASH_REMATCH[1]}"
+                BRANCH="${BASH_REMATCH[2]}"
+                PR_TITLE=$(git log -1 --format=%b $hash | head -n1 | sed 's/^[[:space:]]*//')
+                if [ -z "$PR_TITLE" ]; then
+                  PR_TITLE=$(echo "$BRANCH" | sed 's/.*\///' | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
+                fi
+                echo "- #$PR_NUM: $PR_TITLE"
+              else
+                echo "- $msg"
+              fi
+            done)
+          fi
+          
           cat > release_notes.md << 'EOF'
           ## What's New in ${{ github.ref_name }}
 
           This release includes pre-built binaries for multiple platforms and architectures.
 
+          ### Changes since last release
+          
+          EOF
+          
+          echo "$COMMITS" >> release_notes.md
+          
+          cat >> release_notes.md << 'EOF'
+
           ### Features
           - MySQL database integration via Model Context Protocol (MCP)
           - Query execution with multiple output formats (table, CSV, markdown, JSON)
           - Schema inspection and table listing
+          - Query analysis with EXPLAIN tool for performance optimization
           - Query caching for improved performance
+          - Data masking support for sensitive information
           - Cross-platform support
 
           ### Installation
