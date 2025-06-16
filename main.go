@@ -205,6 +205,20 @@ func (s *MCPServer) handleToolsList(req *Request) *Response {
 				"properties": map[string]interface{}{},
 			},
 		},
+		{
+			"name":        "explain",
+			"description": "Analyze the execution plan of a MySQL query to understand performance",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"query": map[string]interface{}{
+						"type":        "string",
+						"description": "The SQL query to analyze",
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
 	}
 
 	return &Response{
@@ -251,6 +265,8 @@ func (s *MCPServer) handleToolsCall(req *Request) *Response {
 		return s.handleSchemaTool(req.ID, params.Arguments)
 	case "tables":
 		return s.handleTablesTool(req.ID)
+	case "explain":
+		return s.handleExplainTool(req.ID, params.Arguments)
 	default:
 		return &Response{
 			JSONRPC: "2.0",
@@ -430,6 +446,57 @@ func (s *MCPServer) handleTablesTool(id interface{}) *Response {
 		},
 	}
 }
+
+func (s *MCPServer) handleExplainTool(id interface{}, args json.RawMessage) *Response {
+	query := gjson.GetBytes(args, "query").String()
+	if query == "" {
+		return &Response{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error: &Error{
+				Code:    -32602,
+				Message: "Missing required parameter: query",
+			},
+		}
+	}
+
+	// Prepare EXPLAIN query
+	explainQuery := "EXPLAIN " + query
+
+	// Execute the EXPLAIN query
+	results, err := s.mysqlClient.Query(explainQuery)
+	if err != nil {
+		return &Response{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error: &Error{
+				Code:    -32603,
+				Message: fmt.Sprintf("Failed to explain query: %v", err),
+			},
+		}
+	}
+
+	// Return raw EXPLAIN results in table format
+	formattedOutput := s.formatResults(results, "table")
+
+	return &Response{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": fmt.Sprintf("Execution plan for: %s", query),
+				},
+				{
+					"type": "text",
+					"text": formattedOutput,
+				},
+			},
+		},
+	}
+}
+
 
 func (s *MCPServer) formatResults(results []map[string]interface{}, outputFormat string) string {
 	if len(results) == 0 {
