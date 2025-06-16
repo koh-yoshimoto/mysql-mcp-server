@@ -128,6 +128,7 @@ class MCPTestClient {
         console.log('Type SQL queries or commands:');
         console.log('  - "tables" to list tables');
         console.log('  - "schema <table>" to show table schema');
+        console.log('  - "explain <query>" to analyze query performance');
         console.log('  - Any SQL query');
         console.log('  - "exit" to quit\n');
 
@@ -163,6 +164,17 @@ class MCPTestClient {
                 const response = await this.request('tools/call', {
                     name: 'schema',
                     arguments: { table }
+                });
+                if (response.result) {
+                    console.log(response.result.content.map(c => c.text).join('\n'));
+                } else if (response.error) {
+                    console.error('Error:', response.error.message);
+                }
+            } else if (input.toLowerCase().startsWith('explain ')) {
+                const query = input.slice(8).trim();
+                const response = await this.request('tools/call', {
+                    name: 'explain',
+                    arguments: { query }
                 });
                 if (response.result) {
                     console.log(response.result.content.map(c => c.text).join('\n'));

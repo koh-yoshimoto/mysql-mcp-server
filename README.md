@@ -7,6 +7,7 @@ A Model Context Protocol (MCP) server that provides MySQL database access throug
 - **Query Execution**: Execute arbitrary SQL queries
 - **Schema Inspection**: View table schemas
 - **Table Listing**: List all tables in the database
+- **Query Analysis**: Analyze query execution plans with optimization suggestions
 
 ## Requirements
 
@@ -132,13 +133,15 @@ Execute a MySQL query.
 
 **Parameters:**
 - `query` (required): The SQL query to execute
+- `format` (optional): Output format - `json`, `table`, `csv`, or `markdown` (default: `table`)
 
 **Example:**
 ```json
 {
   "name": "query",
   "arguments": {
-    "query": "SELECT * FROM users LIMIT 10"
+    "query": "SELECT * FROM users LIMIT 10",
+    "format": "csv"
   }
 }
 ```
@@ -167,6 +170,22 @@ List all tables in the database.
 {
   "name": "tables",
   "arguments": {}
+}
+```
+
+### explain
+Analyze the execution plan of a MySQL query to understand performance.
+
+**Parameters:**
+- `query` (required): The SQL query to analyze
+
+**Example:**
+```json
+{
+  "name": "explain",
+  "arguments": {
+    "query": "SELECT * FROM users WHERE email = 'test@example.com'"
+  }
 }
 ```
 
