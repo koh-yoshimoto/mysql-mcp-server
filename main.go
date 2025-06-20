@@ -245,13 +245,18 @@ func (s *MCPServer) handleToolsList(req *Request) *Response {
 		},
 		{
 			"name":        "explain",
-			"description": "Analyze the execution plan of a MySQL query to understand performance",
+			"description": "Analyze the execution plan of a MySQL query to understand performance. Use analyze=true to get actual execution statistics (EXPLAIN ANALYZE).",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"query": map[string]interface{}{
 						"type":        "string",
 						"description": "The SQL query to analyze",
+					},
+					"analyze": map[string]interface{}{
+						"type":        "boolean",
+						"description": "If true, runs EXPLAIN ANALYZE to get actual execution statistics. Note: This will execute the query.",
+						"default":     false,
 					},
 				},
 				"required": []string{"query"},
@@ -594,8 +599,59 @@ func (s *MCPServer) handleExplainTool(id interface{}, args json.RawMessage) *Res
 		}
 	}
 
+	// Get analyze option
+	analyze := gjson.GetBytes(args, "analyze").Bool()
+	
+	// Validate that this is a SELECT query when using EXPLAIN ANALYZE
+	if analyze && !isSelectQuery(query) {
+		operation := detectQueryOperation(query)
+		
+		// Provide helpful suggestion based on operation type
+		suggestion := ""
+		switch operation {
+		case "UPDATE":
+			// Extract table name from UPDATE query
+			re := regexp.MustCompile(`(?i)UPDATE\s+(\S+)\s+SET`)
+			matches := re.FindStringSubmatch(query)
+			if len(matches) > 1 {
+				table := matches[1]
+				suggestion = fmt.Sprintf("To analyze UPDATE performance, try: SELECT * FROM %s WHERE <your conditions>", table)
+			}
+		case "DELETE":
+			// Extract table name from DELETE query
+			re := regexp.MustCompile(`(?i)DELETE\s+FROM\s+(\S+)`)
+			matches := re.FindStringSubmatch(query)
+			if len(matches) > 1 {
+				table := matches[1]
+				suggestion = fmt.Sprintf("To analyze DELETE performance, try: SELECT * FROM %s WHERE <your conditions>", table)
+			}
+		case "INSERT":
+			suggestion = "To analyze INSERT performance, examine the table structure with 'schema <table>' or analyze a SELECT on the target table"
+		default:
+			suggestion = "EXPLAIN ANALYZE can only be used with SELECT queries as it executes the query"
+		}
+		
+		return &Response{
+			JSONRPC: "2.0",
+			ID:      id,
+			Error: &Error{
+				Code:    -32602,
+				Message: fmt.Sprintf("EXPLAIN ANALYZE cannot be used with %s queries as it would execute the modification", operation),
+			},
+			Result: map[string]interface{}{
+				"hint": "EXPLAIN ANALYZE actually executes the query. For safety, it's restricted to SELECT queries only.",
+				"suggestion": suggestion,
+				"alternative": "Use EXPLAIN (without ANALYZE) to see the execution plan without running the query",
+			},
+		}
+	}
+	
 	// Prepare EXPLAIN query
-	explainQuery := "EXPLAIN " + query
+	explainPrefix := "EXPLAIN"
+	if analyze {
+		explainPrefix = "EXPLAIN ANALYZE"
+	}
+	explainQuery := explainPrefix + " " + query
 
 	// Execute the EXPLAIN query
 	results, err := s.mysqlClient.Query(explainQuery)
@@ -612,21 +668,37 @@ func (s *MCPServer) handleExplainTool(id interface{}, args json.RawMessage) *Res
 
 	// Return raw EXPLAIN results in table format
 	formattedOutput := s.formatResults(results, "table")
+	
+	// Prepare header text
+	headerText := fmt.Sprintf("Execution plan for: %s", query)
+	if analyze {
+		headerText = fmt.Sprintf("Execution plan with actual statistics for: %s", query)
+	}
+	
+	contentMessages := []map[string]interface{}{
+		{
+			"type": "text",
+			"text": headerText,
+		},
+	}
+	
+	if analyze {
+		contentMessages = append(contentMessages, map[string]interface{}{
+			"type": "text",
+			"text": "⚠️  Note: EXPLAIN ANALYZE actually executes the query to gather statistics.",
+		})
+	}
+	
+	contentMessages = append(contentMessages, map[string]interface{}{
+		"type": "text",
+		"text": formattedOutput,
+	})
 
 	return &Response{
 		JSONRPC: "2.0",
 		ID:      id,
 		Result: map[string]interface{}{
-			"content": []map[string]interface{}{
-				{
-					"type": "text",
-					"text": fmt.Sprintf("Execution plan for: %s", query),
-				},
-				{
-					"type": "text",
-					"text": formattedOutput,
-				},
-			},
+			"content": contentMessages,
 		},
 	}
 }
