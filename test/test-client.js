@@ -123,13 +123,76 @@ class MCPTestClient {
             }
         }
 
+        // Test 6: Test query tool rejects UPDATE
+        console.log('\n6. Testing query tool rejects UPDATE...');
+        const updateQueryResponse = await this.request('tools/call', {
+            name: 'query',
+            arguments: {
+                query: 'UPDATE users SET name = "test" WHERE id = 1'
+            }
+        });
+        console.log('← Response:', JSON.stringify(updateQueryResponse, null, 2));
+        if (updateQueryResponse.error) {
+            console.log('✓ Query tool correctly rejected UPDATE statement');
+        } else {
+            console.log('✗ Query tool should have rejected UPDATE statement');
+        }
+
+        // Test 7: Test execute tool dry run
+        console.log('\n7. Testing execute tool dry run...');
+        const dryRunResponse = await this.request('tools/call', {
+            name: 'execute',
+            arguments: {
+                sql: 'UPDATE users SET name = "test_user" WHERE id = 999999',
+                dry_run: true
+            }
+        });
+        console.log('← Response:', JSON.stringify(dryRunResponse, null, 2));
+        
+        let confirmToken = null;
+        if (dryRunResponse.result && dryRunResponse.result.confirm_token) {
+            confirmToken = dryRunResponse.result.confirm_token;
+            console.log('✓ Dry run successful, got confirmation token:', confirmToken);
+        }
+
+        // Test 8: Test execute tool with wrong token
+        if (confirmToken) {
+            console.log('\n8. Testing execute tool with wrong token...');
+            const wrongTokenResponse = await this.request('tools/call', {
+                name: 'execute',
+                arguments: {
+                    sql: 'UPDATE users SET name = "test_user" WHERE id = 999999',
+                    dry_run: false,
+                    confirm_token: 'wrong_token_12345'
+                }
+            });
+            console.log('← Response:', JSON.stringify(wrongTokenResponse, null, 2));
+            if (wrongTokenResponse.error) {
+                console.log('✓ Execute tool correctly rejected invalid token');
+            }
+        }
+
+        // Test 9: Test execute tool rejects SELECT
+        console.log('\n9. Testing execute tool rejects SELECT...');
+        const selectExecuteResponse = await this.request('tools/call', {
+            name: 'execute',
+            arguments: {
+                sql: 'SELECT * FROM users'
+            }
+        });
+        console.log('← Response:', JSON.stringify(selectExecuteResponse, null, 2));
+        if (selectExecuteResponse.error) {
+            console.log('✓ Execute tool correctly rejected SELECT statement');
+        }
+
         // Interactive mode
         console.log('\n=== Entering Interactive Mode ===');
         console.log('Type SQL queries or commands:');
         console.log('  - "tables" to list tables');
         console.log('  - "schema <table>" to show table schema');
         console.log('  - "explain <query>" to analyze query performance');
-        console.log('  - Any SQL query');
+        console.log('  - "execute <sql>" to run INSERT/UPDATE/DELETE with dry-run');
+        console.log('  - Any SQL SELECT query');
         console.log('  - "exit" to quit\n');
 
         const rl = readline.createInterface({
@@ -180,6 +243,41 @@ class MCPTestClient {
                     console.log(response.result.content.map(c => c.text).join('\n'));
                 } else if (response.error) {
                     console.error('Error:', response.error.message);
+                }
+            } else if (input.toLowerCase().startsWith('execute ')) {
+                const sql = input.slice(8).trim();
+                const response = await this.request('tools/call', {
+                    name: 'execute',
+                    arguments: { sql, dry_run: true }
+                });
+                if (response.result) {
+                    console.log(response.result.content.map(c => c.text).join('\n'));
+                    if (response.result.confirm_token) {
+                        console.log('\nTo execute, type: confirm ' + response.result.confirm_token);
+                        this.lastExecuteSql = sql;
+                    }
+                } else if (response.error) {
+                    console.error('Error:', response.error.message);
+                }
+            } else if (input.toLowerCase().startsWith('confirm ')) {
+                const token = input.slice(8).trim();
+                if (!this.lastExecuteSql) {
+                    console.error('No pending execute command');
+                } else {
+                    const response = await this.request('tools/call', {
+                        name: 'execute',
+                        arguments: { 
+                            sql: this.lastExecuteSql,
+                            dry_run: false,
+                            confirm_token: token
+                        }
+                    });
+                    if (response.result) {
+                        console.log(response.result.content.map(c => c.text).join('\n'));
+                        this.lastExecuteSql = null;
+                    } else if (response.error) {
+                        console.error('Error:', response.error.message);
+                    }
                 }
             } else if (input) {
                 const response = await this.request('tools/call', {

@@ -129,10 +129,10 @@ export MYSQL_DATABASE=testdb
 ## Available Tools
 
 ### query
-Execute a MySQL query.
+Execute SELECT queries to retrieve data from MySQL database. This tool is restricted to SELECT statements only for safety. Use the `execute` tool for data modification operations.
 
 **Parameters:**
-- `query` (required): The SQL query to execute
+- `query` (required): SELECT statement only
 - `format` (optional): Output format - `json`, `table`, `csv`, or `markdown` (default: `table`)
 
 **Example:**
@@ -140,8 +140,56 @@ Execute a MySQL query.
 {
   "name": "query",
   "arguments": {
-    "query": "SELECT * FROM users LIMIT 10",
+    "query": "SELECT * FROM users WHERE status = 'active' LIMIT 10",
     "format": "csv"
+  }
+}
+```
+
+### execute
+Execute INSERT, UPDATE, DELETE queries with safety checks. This tool implements a two-step execution process for safety:
+1. First run with `dry_run=true` to preview affected rows
+2. Then run with `dry_run=false` and the confirmation token to execute
+
+**Parameters:**
+- `sql` (required): INSERT, UPDATE, or DELETE statement
+- `dry_run` (optional): If true, shows affected rows without executing (default: true)
+- `confirm_token` (optional): Token from dry-run response, required when dry_run=false
+
+**Example - Step 1 (Dry Run):**
+```json
+{
+  "name": "execute",
+  "arguments": {
+    "sql": "UPDATE users SET status = 'inactive' WHERE last_login < '2024-01-01'",
+    "dry_run": true
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "content": [
+    {"type": "text", "text": "DRY RUN - Operation: UPDATE"},
+    {"type": "text", "text": "This operation will affect 42 rows"},
+    {"type": "text", "text": "To execute this query, run again with dry_run=false and the confirmation token below:"},
+    {"type": "text", "text": "confirm_token: abc123def456"}
+  ],
+  "affected_rows": 42,
+  "operation": "UPDATE",
+  "confirm_token": "abc123def456"
+}
+```
+
+**Example - Step 2 (Execute):**
+```json
+{
+  "name": "execute",
+  "arguments": {
+    "sql": "UPDATE users SET status = 'inactive' WHERE last_login < '2024-01-01'",
+    "dry_run": false,
+    "confirm_token": "abc123def456"
   }
 }
 ```
@@ -296,9 +344,13 @@ make run
 
 ## Security Considerations
 
-- Never expose this server to untrusted clients as it allows arbitrary SQL execution
+- The `query` tool is restricted to SELECT statements only to prevent accidental data modification
+- The `execute` tool requires a two-step confirmation process for all data modification operations
+- Never expose this server to untrusted clients
 - Use appropriate MySQL user permissions
 - Consider using read-only database users when possible
+- The dry-run feature allows you to preview the impact of UPDATE/DELETE operations before execution
+- Confirmation tokens expire after 5 minutes for security
 - Keep your database credentials secure
 
 ## License
