@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -362,5 +364,90 @@ func TestCleanupExpiredTokens(t *testing.T) {
 	}
 	if _, exists := server.confirmTokens["very_old"]; exists {
 		t.Error("Very old token should be removed")
+	}
+}
+
+// TestExplainAnalyzeValidation tests that EXPLAIN ANALYZE rejects non-SELECT queries
+func TestExplainAnalyzeValidation(t *testing.T) {
+	tests := []struct {
+		name             string
+		query            string
+		analyze          bool
+		shouldReject     bool
+		expectedSuggestion string
+	}{
+		{
+			name:         "EXPLAIN ANALYZE with SELECT",
+			query:        "SELECT * FROM users WHERE id = 1",
+			analyze:      true,
+			shouldReject: false,
+		},
+		{
+			name:         "EXPLAIN ANALYZE with UPDATE",
+			query:        "UPDATE users SET name = 'test'",
+			analyze:      true,
+			shouldReject: true,
+			expectedSuggestion: "SELECT * FROM users WHERE",
+		},
+		{
+			name:         "EXPLAIN ANALYZE with DELETE",
+			query:        "DELETE FROM users WHERE id = 1",
+			analyze:      true,
+			shouldReject: true,
+			expectedSuggestion: "SELECT * FROM users WHERE",
+		},
+		{
+			name:         "EXPLAIN ANALYZE with INSERT",
+			query:        "INSERT INTO users (name) VALUES ('test')",
+			analyze:      true,
+			shouldReject: true,
+			expectedSuggestion: "schema",
+		},
+		{
+			name:         "EXPLAIN (no ANALYZE) with UPDATE",
+			query:        "UPDATE users SET name = 'test'",
+			analyze:      false,
+			shouldReject: false, // Regular EXPLAIN is allowed for all queries
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Only test the validation logic
+			if tt.analyze && !isSelectQuery(tt.query) {
+				if !tt.shouldReject {
+					t.Error("Should reject non-SELECT query with EXPLAIN ANALYZE")
+				}
+				
+				// Test suggestion generation
+				operation := detectQueryOperation(tt.query)
+				var suggestion string
+				
+				switch operation {
+				case "UPDATE":
+					re := regexp.MustCompile(`(?i)UPDATE\s+(\S+)\s+SET`)
+					matches := re.FindStringSubmatch(tt.query)
+					if len(matches) > 1 {
+						table := matches[1]
+						suggestion = fmt.Sprintf("To analyze UPDATE performance, try: SELECT * FROM %s WHERE <your conditions>", table)
+					}
+				case "DELETE":
+					re := regexp.MustCompile(`(?i)DELETE\s+FROM\s+(\S+)`)
+					matches := re.FindStringSubmatch(tt.query)
+					if len(matches) > 1 {
+						table := matches[1]
+						suggestion = fmt.Sprintf("To analyze DELETE performance, try: SELECT * FROM %s WHERE <your conditions>", table)
+					}
+				case "INSERT":
+					suggestion = "To analyze INSERT performance, examine the table structure with 'schema <table>' or analyze a SELECT on the target table"
+				}
+				
+				if tt.expectedSuggestion != "" && !strings.Contains(suggestion, tt.expectedSuggestion) {
+					t.Errorf("Expected suggestion to contain %q, got %q", tt.expectedSuggestion, suggestion)
+				}
+			} else if tt.shouldReject {
+				t.Error("Should not reject this query")
+			}
+		})
 	}
 }

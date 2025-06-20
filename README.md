@@ -222,12 +222,13 @@ List all tables in the database.
 ```
 
 ### explain
-Analyze the execution plan of a MySQL query to understand performance.
+Analyze the execution plan of a MySQL query to understand performance. Supports both EXPLAIN and EXPLAIN ANALYZE.
 
 **Parameters:**
 - `query` (required): The SQL query to analyze
+- `analyze` (optional): If true, runs EXPLAIN ANALYZE to get actual execution statistics (default: false)
 
-**Example:**
+**Example - Basic EXPLAIN:**
 ```json
 {
   "name": "explain",
@@ -236,6 +237,19 @@ Analyze the execution plan of a MySQL query to understand performance.
   }
 }
 ```
+
+**Example - EXPLAIN ANALYZE:**
+```json
+{
+  "name": "explain",
+  "arguments": {
+    "query": "SELECT * FROM users WHERE age > 25",
+    "analyze": true
+  }
+}
+```
+
+**Note:** EXPLAIN ANALYZE actually executes the query to gather real execution statistics, including actual row counts and timing information. Use with caution on queries that modify data or take a long time to execute.
 
 ## Integration with AI Tools
 

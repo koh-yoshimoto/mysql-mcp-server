@@ -185,12 +185,30 @@ class MCPTestClient {
             console.log('✓ Execute tool correctly rejected SELECT statement');
         }
 
+        // Test 10: Test EXPLAIN ANALYZE rejects UPDATE
+        console.log('\n10. Testing EXPLAIN ANALYZE rejects UPDATE...');
+        const explainAnalyzeUpdateResponse = await this.request('tools/call', {
+            name: 'explain',
+            arguments: {
+                query: 'UPDATE users SET name = "test" WHERE id = 1',
+                analyze: true
+            }
+        });
+        console.log('← Response:', JSON.stringify(explainAnalyzeUpdateResponse, null, 2));
+        if (explainAnalyzeUpdateResponse.error) {
+            console.log('✓ EXPLAIN ANALYZE correctly rejected UPDATE statement');
+            if (explainAnalyzeUpdateResponse.result && explainAnalyzeUpdateResponse.result.suggestion) {
+                console.log('  Suggestion:', explainAnalyzeUpdateResponse.result.suggestion);
+            }
+        }
+
         // Interactive mode
         console.log('\n=== Entering Interactive Mode ===');
         console.log('Type SQL queries or commands:');
         console.log('  - "tables" to list tables');
         console.log('  - "schema <table>" to show table schema');
         console.log('  - "explain <query>" to analyze query performance');
+        console.log('  - "explain analyze <query>" to get actual execution statistics');
         console.log('  - "execute <sql>" to run INSERT/UPDATE/DELETE with dry-run');
         console.log('  - Any SQL SELECT query');
         console.log('  - "exit" to quit\n');
@@ -233,13 +251,36 @@ class MCPTestClient {
                 } else if (response.error) {
                     console.error('Error:', response.error.message);
                 }
+            } else if (input.toLowerCase().startsWith('explain analyze ')) {
+                const query = input.slice(16).trim();
+                const response = await this.request('tools/call', {
+                    name: 'explain',
+                    arguments: { query, analyze: true }
+                });
+                if (response.result && response.result.content) {
+                    console.log(response.result.content.map(c => c.text).join('\n'));
+                } else if (response.error) {
+                    console.error('Error:', response.error.message);
+                    // Check if there's additional help in the result
+                    if (response.result) {
+                        if (response.result.hint) {
+                            console.log('Hint:', response.result.hint);
+                        }
+                        if (response.result.suggestion) {
+                            console.log('Suggestion:', response.result.suggestion);
+                        }
+                        if (response.result.alternative) {
+                            console.log('Alternative:', response.result.alternative);
+                        }
+                    }
+                }
             } else if (input.toLowerCase().startsWith('explain ')) {
                 const query = input.slice(8).trim();
                 const response = await this.request('tools/call', {
                     name: 'explain',
                     arguments: { query }
                 });
-                if (response.result) {
+                if (response.result && response.result.content) {
                     console.log(response.result.content.map(c => c.text).join('\n'));
                 } else if (response.error) {
                     console.error('Error:', response.error.message);
