@@ -416,17 +416,7 @@ func (s *MCPServer) handleQueryTool(id interface{}, args json.RawMessage) *Respo
 			ID:      id,
 			Error: &Error{
 				Code:    -32602,
-				Message: fmt.Sprintf("This tool only supports SELECT queries. For %s operations, please use the 'execute' tool instead.", operation),
-			},
-			Result: map[string]interface{}{
-				"hint": "Use the 'execute' tool with dry_run=true first to preview changes before executing data modification queries.",
-				"example": map[string]interface{}{
-					"tool": "execute",
-					"params": map[string]interface{}{
-						"sql":     query,
-						"dry_run": true,
-					},
-				},
+				Message: fmt.Sprintf("This tool only supports SELECT queries. For %s operations, please use the 'execute' tool instead. Use the 'execute' tool with dry_run=true first to preview changes before executing data modification queries.", operation),
 			},
 		}
 	}
@@ -631,17 +621,17 @@ func (s *MCPServer) handleExplainTool(id interface{}, args json.RawMessage) *Res
 			suggestion = "EXPLAIN ANALYZE can only be used with SELECT queries as it executes the query"
 		}
 
+		errorMessage := fmt.Sprintf("EXPLAIN ANALYZE cannot be used with %s queries as it would execute the modification. ", operation)
+		errorMessage += "EXPLAIN ANALYZE actually executes the query, so for safety it's restricted to SELECT queries only. "
+		errorMessage += suggestion + ". "
+		errorMessage += "Alternative: Use EXPLAIN (without ANALYZE) to see the execution plan without running the query."
+		
 		return &Response{
 			JSONRPC: "2.0",
 			ID:      id,
 			Error: &Error{
 				Code:    -32602,
-				Message: fmt.Sprintf("EXPLAIN ANALYZE cannot be used with %s queries as it would execute the modification", operation),
-			},
-			Result: map[string]interface{}{
-				"hint":        "EXPLAIN ANALYZE actually executes the query. For safety, it's restricted to SELECT queries only.",
-				"suggestion":  suggestion,
-				"alternative": "Use EXPLAIN (without ANALYZE) to see the execution plan without running the query",
+				Message: errorMessage,
 			},
 		}
 	}
@@ -723,16 +713,7 @@ func (s *MCPServer) handleExecuteTool(id interface{}, args json.RawMessage) *Res
 			ID:      id,
 			Error: &Error{
 				Code:    -32602,
-				Message: "SELECT queries should use the 'query' tool instead",
-			},
-			Result: map[string]interface{}{
-				"hint": "Use the 'query' tool for SELECT statements",
-				"example": map[string]interface{}{
-					"tool": "query",
-					"params": map[string]interface{}{
-						"query": sql,
-					},
-				},
+				Message: "SELECT queries should use the 'query' tool instead. Use the 'query' tool for SELECT statements.",
 			},
 		}
 	}
